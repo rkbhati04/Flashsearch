@@ -1,6 +1,6 @@
 # FlashSearch
 
-A full-text search engine with **TF-IDF ranking** over a corpus of **250+ Wikipedia articles** on computer science topics. Features an NLP preprocessing pipeline, boolean query support, and a modern search UI.
+A full-text search engine with **TF-IDF ranking** over the **AG News dataset (120,000 news articles)**. Features an NLP preprocessing pipeline, boolean query support, and a modern search UI.
 
 ## Features
 
@@ -71,7 +71,12 @@ python app.py
 ```
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
 
-### Fetch More Data (Optional)
+### Setup AG News Dataset
+```bash
+python setup_ag_news.py       # Downloads & converts 120,000 AG News articles
+```
+
+### Fetch Wikipedia Data (Alternative)
 ```bash
 python data_fetcher.py 500    # Fetches ~500 Wikipedia CS articles
 ```
@@ -82,11 +87,12 @@ python data_fetcher.py 500    # Fetches ~500 Wikipedia CS articles
 FlashSearch/
 ├── app.py               # Flask server (API + UI)
 ├── search_engine.py      # TF-IDF search engine with LRU cache
-├── indexer.py            # Inverted index builder
+├── indexer.py            # Inverted index builder (auto-detects data source)
 ├── preprocess.py         # spaCy NLP pipeline
-├── data_fetcher.py       # Wikipedia API data fetcher
+├── setup_ag_news.py      # AG News dataset downloader (120K articles)
+├── data_fetcher.py       # Wikipedia API data fetcher (alternative)
 ├── crawler.py            # Original web scraper (legacy)
-├── corpus.json           # Article corpus (250+ docs)
+├── corpus.json           # Wikipedia corpus (fallback)
 ├── templates/
 │   └── index.html        # Search UI
 ├── static/
