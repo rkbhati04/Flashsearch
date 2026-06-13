@@ -12,7 +12,7 @@ def build_index(json_file=None):
     """
     Build inverted index from documents in JSON file.
 
-    Automatically detects corpus.json (new) or wiki_data.json (legacy).
+    Automatically detects data/KDMP.json, corpus.json (new) or wiki_data.json (legacy).
 
     Args:
         json_file (str): Path to JSON file containing documents
@@ -22,32 +22,55 @@ def build_index(json_file=None):
     """
     # Auto-detect data file
     if json_file is None:
-        if os.path.exists("corpus.json"):
+        if os.path.exists("ag_news.json"):
+            json_file = "ag_news.json"
+        elif os.path.exists("data/KDMP.json"):
+            json_file = "data/KDMP.json"
+        elif os.path.exists("corpus.json"):
             json_file = "corpus.json"
         elif os.path.exists("wiki_data.json"):
             json_file = "wiki_data.json"
         else:
             raise FileNotFoundError(
                 "No data file found. Run data_fetcher.py first, "
-                "or ensure corpus.json / wiki_data.json exists."
+                "or ensure data/KDMP.json exists."
             )
 
     # Load documents
     with open(json_file, "r", encoding="utf-8") as f:
-        documents = json.load(f)
+        raw_documents = json.load(f)
 
-    print(f"Building index from {json_file} ({len(documents)} documents)...")
+    print(f"Building index from {json_file} ({len(raw_documents)} documents)...")
+
+    # If it's KDMP.json, transform it to expected format
+    documents = []
+    if "KDMP.json" in json_file:
+        for i, item in enumerate(raw_documents):
+            doc = {
+                "id": i + 1,  # 1-indexed doc_id required by search_engine.py
+                "title": f"Comment by {item.get('nickname', item.get('username', 'Unknown'))}",
+                "content": item.get("comment", "")
+            }
+            # Optional: keep original metadata if you want
+            doc.update(item)
+            documents.append(doc)
+    else:
+        documents = raw_documents
 
     # Create inverted index: token -> {doc_id: frequency}
     inverted_index = defaultdict(lambda: defaultdict(int))
 
-    for doc in documents:
+    for i, doc in enumerate(documents):
         doc_id = doc["id"]
         text = doc.get("title", "") + " " + doc.get("content", "")
         tokens = preprocess(text)
 
         for token in tokens:
             inverted_index[token][doc_id] += 1
+            
+        # Print progress every 10,000 documents
+        if (i + 1) % 10000 == 0:
+            print(f"  Processed {i + 1} / {len(documents)} documents...")
 
     print(f"Index built: {len(inverted_index)} unique tokens")
     return inverted_index, documents

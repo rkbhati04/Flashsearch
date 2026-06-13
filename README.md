@@ -13,6 +13,14 @@ A full-text search engine with **TF-IDF ranking** over a corpus of **250+ Wikipe
 - **REST API** — 6 endpoints for search, document retrieval, and statistics
 - **Dockerized** — production-ready container with gunicorn
 
+## Screenshots
+
+![Main Page](./Mainpage.png)
+
+![Example Search 1](./example1.png)
+
+![Example Search 2](./example2.png)
+
 ## Architecture
 
 ```

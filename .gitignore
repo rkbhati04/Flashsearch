@@ -43,8 +43,11 @@ venv.bak/
 wiki_data.json
 check_docs.py
 index.json
+ag_news.json
+data/
 
 # Local development
 *.log
 .env
 .env.local
+
