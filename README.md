@@ -1,120 +1,143 @@
-# FlashSearch - Wikipedia Crawler & Inverted Index Search Engine
+# FlashSearch
 
-A Python-based web scraper and full-text search engine that crawls Wikipedia articles and builds an inverted index for fast document retrieval.
+A full-text search engine with **TF-IDF ranking** over a corpus of **250+ Wikipedia articles** on computer science topics. Features an NLP preprocessing pipeline, boolean query support, and a modern search UI.
 
 ## Features
 
-- **Web Crawler**: Scrapes Wikipedia articles starting from any topic
-- **Text Preprocessing**: Uses spaCy for lemmatization, stop word removal, and tokenization
-- **Inverted Index**: Efficient full-text search index structure
-- **Search Engine**: Query documents with relevance ranking based on token frequency
+- **TF-IDF Ranking** — log-normalized term frequency × inverse document frequency scoring
+- **NLP Pipeline** — spaCy-powered tokenization, lemmatization, and stopword removal
+- **Inverted Index** — O(1) token lookup with precomputed IDF values
+- **LRU Cache** — bounded, eviction-based cache for repeated queries (sub-millisecond cache hits)
+- **Boolean Queries** — AND (all terms match) and OR (any term matches)
+- **Search UI** — dark-mode interface with real-time search, result highlighting, and pagination
+- **REST API** — 6 endpoints for search, document retrieval, and statistics
+- **Dockerized** — production-ready container with gunicorn
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Browser (Search UI)                                    │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │  index.html + app.js + style.css                  │  │
+│  │  Debounced search · AND/OR toggle · Pagination    │  │
+│  └───────────────────┬───────────────────────────────┘  │
+│                      │ fetch()                          │
+├──────────────────────┼──────────────────────────────────┤
+│  Flask API Server    │                                  │
+│  ┌───────────────────▼───────────────────────────────┐  │
+│  │  /api/search      POST  (AND query)               │  │
+│  │  /api/search/or   POST  (OR query)                │  │
+│  │  /api/document/<id> GET (full document)           │  │
+│  │  /api/stats       GET  (index + cache stats)      │  │
+│  │  /api/health      GET  (health check)             │  │
+│  └───────────────────┬───────────────────────────────┘  │
+│                      │                                  │
+│  ┌───────────────────▼───────────────────────────────┐  │
+│  │  SearchEngine (TF-IDF + LRU Cache)                │  │
+│  │  ┌──────────┐  ┌────────────┐  ┌──────────────┐  │  │
+│  │  │ Preprocess│→│Inverted Idx│→│TF-IDF Scoring │  │  │
+│  │  │ (spaCy)  │  │ (token→doc)│  │ (log-TF×IDF) │  │  │
+│  │  └──────────┘  └────────────┘  └──────────────┘  │  │
+│  └───────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Quick Start
+
+### Prerequisites
+- Python 3.8+
+
+### Installation
+```bash
+git clone https://github.com/rkbhati04/Flashsearch.git
+cd Flashsearch
+
+pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+```
+
+### Run
+```bash
+python app.py
+```
+Open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
+
+### Fetch More Data (Optional)
+```bash
+python data_fetcher.py 500    # Fetches ~500 Wikipedia CS articles
+```
 
 ## Project Structure
 
 ```
 FlashSearch/
-├── crawler.py           # Wikipedia web scraper
-├── preprocess.py        # Text preprocessing with spaCy
-├── invertedindex.py     # Inverted index and search functionality
-├── tokenize_json.py     # Test tokenizer script
-├── wiki_data.json       # Scraped Wikipedia data
-└── README.md            # This file
+├── app.py               # Flask server (API + UI)
+├── search_engine.py      # TF-IDF search engine with LRU cache
+├── indexer.py            # Inverted index builder
+├── preprocess.py         # spaCy NLP pipeline
+├── data_fetcher.py       # Wikipedia API data fetcher
+├── crawler.py            # Original web scraper (legacy)
+├── corpus.json           # Article corpus (250+ docs)
+├── templates/
+│   └── index.html        # Search UI
+├── static/
+│   ├── style.css         # UI styles
+│   └── app.js            # Frontend logic
+├── Dockerfile            # Container config
+├── requirements.txt      # Python dependencies
+├── render.yaml           # Render deployment config
+└── README.md
 ```
 
-## Installation
+## API
 
-### Prerequisites
-- Python 3.8+
-- pip (Python package manager)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/` | Search UI |
+| `GET` | `/api` | API docs |
+| `GET` | `/api/stats` | Index + cache statistics |
+| `POST` | `/api/search` | AND search (JSON: `{"query": "..."}`) |
+| `POST` | `/api/search/or` | OR search (JSON: `{"query": "..."}`) |
+| `GET` | `/api/document/<id>` | Full document by ID |
+| `GET` | `/api/health` | Health check |
 
-### Required Libraries
+### Example Response
+```json
+{
+  "query": "machine learning",
+  "search_type": "AND",
+  "total_matches": 12,
+  "results_count": 12,
+  "latency_ms": 3.42,
+  "cached": false,
+  "results": [
+    {
+      "doc_id": 3,
+      "title": "Machine learning",
+      "score": 18.4523,
+      "preview": "Machine learning is a subset of artificial intelligence..."
+    }
+  ]
+}
+```
+
+## Tech Stack
+
+- **Python** — Core language
+- **Flask** — Web framework and API server
+- **spaCy** — NLP preprocessing (tokenization, lemmatization, stopword removal)
+- **TF-IDF** — Information retrieval ranking algorithm
+- **Docker** — Containerization
+- **Gunicorn** — Production WSGI server
+
+## Docker
+
 ```bash
-pip install requests beautifulsoup4 spacy
-python -m spacy download en_core_web_sm
+docker build -t flashsearch .
+docker run -p 5000:5000 flashsearch
 ```
-
-## Usage
-
-### 1. Crawl Wikipedia
-```bash
-python crawler.py
-```
-This will scrape 20 Wikipedia articles starting from "Computer science" and save data to `wiki_data.json`.
-
-### 2. Build Inverted Index and Search
-```bash
-python invertedindex.py
-```
-This creates an inverted index and runs example searches.
-
-### 3. Test Tokenization
-```bash
-python tokenize_json.py
-```
-This tests the preprocessing pipeline on the first document.
-
-## How It Works
-
-### Crawler (crawler.py)
-- Sends HTTP requests to Wikipedia pages
-- Parses HTML using BeautifulSoup
-- Extracts titles and content from articles
-- Follows random links to discover new pages
-- Saves data in JSON format
-
-### Preprocessing (preprocess.py)
-- Loads spaCy's English language model
-- Tokenizes text into individual words
-- Converts words to their base form (lemmatization)
-- Removes punctuation, whitespace, and stop words
-- Returns cleaned tokens for indexing
-
-### Inverted Index (invertedindex.py)
-- Maps each token to the documents containing it
-- Tracks token frequency in each document
-- Provides `search(query)` function for full-text search
-- Ranks results by relevance (token frequency)
-
-## Example Searches
-
-```python
-from invertedindex import search, display_results
-
-# Search for documents about "computer"
-results = search("computer")
-display_results(results, "computer")
-
-# Search with multiple terms
-results = search("scientific research")
-display_results(results, "scientific research")
-```
-
-## Performance
-
-- **Index Size**: 526 unique tokens
-- **Documents**: 20 Wikipedia articles
-- **Search Time**: O(k) where k is number of matching documents
-
-## Technologies Used
-
-- **BeautifulSoup**: HTML parsing
-- **Requests**: HTTP requests
-- **spaCy**: NLP and text processing
-- **Python Collections**: Efficient data structures (defaultdict)
-
-## Future Enhancements
-
-- [ ] TF-IDF ranking algorithm
-- [ ] Boolean query support (AND, OR, NOT)
-- [ ] Phrase search
-- [ ] Web UI for searching
-- [ ] Persistent database (SQLite/PostgreSQL)
-- [ ] Pagination for large result sets
-
-## Author
-
-Created as a demonstration of web scraping and information retrieval concepts.
 
 ## License
 
-MIT License - Feel free to use for educational purposes.
+MIT License

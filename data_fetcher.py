@@ -1,6 +1,7 @@
 """
 Wikipedia Data Fetcher — Uses MediaWiki API instead of web scraping.
-Fetches 1,000+ substantive articles from curated CS-related categories.
+Fetches substantive articles from curated CS-related categories.
+Includes retry logic with exponential backoff for rate limiting.
 """
 import requests
 import json
@@ -15,113 +16,101 @@ SESSION.headers.update({
     "User-Agent": "FlashSearch/1.0 (https://github.com/rkbhati04/Flashsearch; rkbhat0105@gmail.com) python-requests"
 })
 
-# Curated categories covering breadth of CS topics
+# Curated categories — broad coverage of CS and tech topics
 CATEGORIES = [
-    "Computer_science",
-    "Artificial_intelligence",
-    "Machine_learning",
-    "Data_structures",
-    "Algorithms",
-    "Operating_systems",
-    "Computer_networking",
-    "Database_management_systems",
-    "Programming_languages",
-    "Software_engineering",
-    "Cryptography",
-    "Computer_security",
-    "Web_development",
-    "Cloud_computing",
-    "Distributed_computing",
-    "Computer_graphics",
-    "Natural_language_processing",
-    "Computer_architecture",
-    "Compilers",
-    "Information_retrieval",
-    "Data_mining",
-    "Computer_vision",
-    "Robotics",
-    "Computational_complexity_theory",
-    "Graph_theory",
-    "Internet_protocols",
-    "Linux",
-    "Free_software",
-    "Python_(programming_language)",
+    "Computer_science", "Artificial_intelligence", "Machine_learning",
+    "Data_structures", "Algorithms", "Operating_systems",
+    "Computer_networking", "Database_management_systems",
+    "Programming_languages", "Software_engineering", "Cryptography",
+    "Computer_security", "Web_development", "Cloud_computing",
+    "Distributed_computing", "Computer_graphics",
+    "Natural_language_processing", "Computer_architecture",
+    "Compilers", "Information_retrieval", "Data_mining",
+    "Computer_vision", "Robotics", "Computational_complexity_theory",
+    "Graph_theory", "Internet_protocols", "Linux",
+    "Free_software", "Python_(programming_language)",
     "Java_(programming_language)",
+    # Additional categories for more coverage
+    "Computer_programming", "World_Wide_Web", "Computer_networks",
+    "Theoretical_computer_science", "Computing",
+    "Formal_methods", "Parallel_computing", "Computer_hardware",
+    "Human%E2%80%93computer_interaction", "Software",
+    "Internet", "Cybernetics", "Automation",
+    "Electronic_design_automation", "History_of_computing",
+    "Computer_engineers", "Programming_paradigms",
+    "Type_theory", "Logic_in_computer_science",
+    "Numerical_analysis", "Mathematical_optimization",
 ]
 
-# Minimum content length to filter out stubs
 MIN_CONTENT_LENGTH = 300
-# Max content to store per article (chars)
 MAX_CONTENT_LENGTH = 3000
+MAX_RETRIES = 3
+BASE_DELAY = 2  # seconds between requests
+
+
+def api_get(params, retries=MAX_RETRIES):
+    """Make an API request with retry + exponential backoff."""
+    for attempt in range(retries):
+        try:
+            response = SESSION.get(API_URL, params=params, timeout=20)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            wait = BASE_DELAY * (2 ** attempt)
+            if attempt < retries - 1:
+                print(f"    Retry {attempt+1}/{retries} in {wait}s... ({type(e).__name__})")
+                time.sleep(wait)
+            else:
+                print(f"  [!] Failed after {retries} retries: {e}")
+                return None
 
 
 def get_category_members(category, limit=100):
-    """
-    Fetch article titles from a Wikipedia category.
-    Uses the MediaWiki API categorymembers endpoint.
-    """
-    titles = []
+    """Fetch article titles from a Wikipedia category."""
     params = {
         "action": "query",
         "list": "categorymembers",
         "cmtitle": f"Category:{category}",
-        "cmlimit": min(limit, 500),  # API max is 500
+        "cmlimit": min(limit, 500),
         "cmtype": "page",
         "format": "json",
     }
-
-    try:
-        response = SESSION.get(API_URL, params=params, timeout=15)
-        response.raise_for_status()
-        data = response.json()
-        members = data.get("query", {}).get("categorymembers", [])
-        titles = [m["title"] for m in members]
-    except Exception as e:
-        print(f"  [!] Error fetching category '{category}': {e}")
-
-    return titles
+    data = api_get(params)
+    if data:
+        return [m["title"] for m in data.get("query", {}).get("categorymembers", [])]
+    return []
 
 
 def get_article_extracts(titles_batch):
-    """
-    Fetch plain-text extracts for a batch of articles (max 20 per request).
-    Returns list of {title, content} dicts.
-    """
-    articles = []
+    """Fetch plain-text extracts for a batch of articles (max 20 per request)."""
     params = {
         "action": "query",
         "titles": "|".join(titles_batch),
         "prop": "extracts",
-        "explaintext": True,  # Plain text, no HTML
+        "explaintext": True,
         "exlimit": len(titles_batch),
         "format": "json",
     }
+    data = api_get(params)
+    if not data:
+        return []
 
-    try:
-        response = SESSION.get(API_URL, params=params, timeout=20)
-        response.raise_for_status()
-        data = response.json()
-        pages = data.get("query", {}).get("pages", {})
-
-        for page_id, page in pages.items():
-            if page_id == "-1":
-                continue
-            extract = page.get("extract", "")
-            if len(extract) >= MIN_CONTENT_LENGTH:
-                articles.append({
-                    "title": page["title"],
-                    "content": extract[:MAX_CONTENT_LENGTH],
-                })
-    except Exception as e:
-        print(f"  [!] Error fetching extracts: {e}")
-
+    articles = []
+    pages = data.get("query", {}).get("pages", {})
+    for page_id, page in pages.items():
+        if page_id == "-1":
+            continue
+        extract = page.get("extract", "")
+        if len(extract) >= MIN_CONTENT_LENGTH:
+            articles.append({
+                "title": page["title"],
+                "content": extract[:MAX_CONTENT_LENGTH],
+            })
     return articles
 
 
 def fetch_corpus(target_count=1000, output_file="corpus.json"):
-    """
-    Main function — fetches articles from all categories until target is reached.
-    """
+    """Main — fetches articles from all categories until target is reached."""
     all_articles = []
     seen_titles = set()
 
@@ -132,24 +121,23 @@ def fetch_corpus(target_count=1000, output_file="corpus.json"):
         if len(all_articles) >= target_count:
             break
 
-        # Calculate how many more we need
         remaining = target_count - len(all_articles)
-        fetch_limit = min(remaining + 50, 200)  # Fetch extra to account for stubs
+        fetch_limit = min(remaining + 50, 200)
 
-        print(f"[{i+1}/{len(CATEGORIES)}] Category: {category} (have {len(all_articles)}/{target_count})")
+        print(f"[{i+1}/{len(CATEGORIES)}] {category} (have {len(all_articles)}/{target_count})")
+
+        time.sleep(BASE_DELAY)  # Rate limit between categories
         titles = get_category_members(category, limit=fetch_limit)
-        
-        # Filter out already-seen titles
+
         new_titles = [t for t in titles if t not in seen_titles]
         seen_titles.update(new_titles)
-        
+
         if not new_titles:
-            print(f"  Skipping — no new articles")
+            print(f"  Skipped (no new articles)")
             continue
 
-        print(f"  Found {len(new_titles)} new titles, fetching extracts...")
+        print(f"  {len(new_titles)} new titles, fetching...")
 
-        # Fetch extracts in batches of 20 (API limit)
         batch_size = 20
         category_articles = []
 
@@ -157,31 +145,25 @@ def fetch_corpus(target_count=1000, output_file="corpus.json"):
             batch = new_titles[j:j + batch_size]
             articles = get_article_extracts(batch)
             category_articles.extend(articles)
-
-            # Respect rate limits
-            time.sleep(0.5)
+            time.sleep(BASE_DELAY)  # Rate limit between batches
 
             if len(all_articles) + len(category_articles) >= target_count:
                 break
 
         all_articles.extend(category_articles)
-        print(f"  Added {len(category_articles)} articles (total: {len(all_articles)})")
+        print(f"  +{len(category_articles)} articles (total: {len(all_articles)})")
 
-    # Assign sequential IDs
+    # Assign sequential IDs and trim
     for idx, article in enumerate(all_articles):
         article["id"] = idx + 1
-
-    # Trim to exact target
     all_articles = all_articles[:target_count]
 
-    # Save to file
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(all_articles, f, indent=2, ensure_ascii=False)
 
     print(f"\n=== Done ===")
     print(f"Saved {len(all_articles)} articles to {output_file}")
     print(f"File size: {len(json.dumps(all_articles)) / 1024:.1f} KB")
-
     return all_articles
 
 

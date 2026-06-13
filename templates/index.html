@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlashSearch — Full-Text Search Engine</title>
+    <meta name="description" content="A full-text search engine with TF-IDF ranking over 1000+ Wikipedia articles. Built with Python, Flask, and spaCy.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="backdrop"></div>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <svg class="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="logo-text">Flash<span class="logo-accent">Search</span></span>
+        </div>
+        <div class="header-stats" id="headerStats">
+            <span class="stat-pill" id="statDocs">— docs</span>
+            <span class="stat-pill" id="statTokens">— tokens</span>
+        </div>
+    </header>
+
+    <!-- Hero / Search Area -->
+    <main class="main">
+        <div class="hero">
+            <h1 class="hero-title">Search <span class="gradient-text">Wikipedia</span> Instantly</h1>
+            <p class="hero-subtitle">Full-text search engine with TF-IDF ranking across a curated corpus</p>
+        </div>
+
+        <div class="search-container">
+            <div class="search-box">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none">
+                    <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+                    <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <input 
+                    type="text" 
+                    id="searchInput" 
+                    class="search-input" 
+                    placeholder="Search articles... (e.g. machine learning, algorithms)" 
+                    autocomplete="off"
+                    autofocus
+                >
+                <div class="search-mode-toggle" id="modeToggle">
+                    <button class="mode-btn active" data-mode="AND" id="btnAnd">AND</button>
+                    <button class="mode-btn" data-mode="OR" id="btnOr">OR</button>
+                </div>
+            </div>
+            <p class="search-hint" id="searchHint">Type at least 2 characters to search</p>
+        </div>
+
+        <!-- Results Meta -->
+        <div class="results-meta" id="resultsMeta" style="display:none;">
+            <div class="meta-left">
+                <span id="metaCount" class="meta-item">0 results</span>
+                <span class="meta-divider">·</span>
+                <span id="metaLatency" class="meta-item meta-latency">0ms</span>
+                <span id="metaCached" class="meta-badge" style="display:none;">CACHED</span>
+            </div>
+            <div class="meta-right">
+                <span id="metaTokens" class="meta-item meta-tokens"></span>
+            </div>
+        </div>
+
+        <!-- Results List -->
+        <div class="results-list" id="resultsList"></div>
+
+        <!-- Loading -->
+        <div class="loading" id="loading" style="display:none;">
+            <div class="loading-spinner"></div>
+            <span>Searching...</span>
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="emptyState" style="display:none;">
+            <svg viewBox="0 0 24 24" fill="none" class="empty-icon">
+                <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <path d="M8 11h6M11 8v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <p class="empty-title">No results found</p>
+            <p class="empty-hint">Try different keywords or switch to OR mode</p>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination" style="display:none;">
+            <button class="page-btn" id="btnPrev" disabled>← Previous</button>
+            <span class="page-info" id="pageInfo">Page 1</span>
+            <button class="page-btn" id="btnNext">Next →</button>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>Built with Python, Flask, spaCy & TF-IDF · 
+            <a href="/api" class="footer-link">API Docs</a> · 
+            <a href="https://github.com/rkbhati04/Flashsearch" class="footer-link" target="_blank">GitHub</a>
+        </p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

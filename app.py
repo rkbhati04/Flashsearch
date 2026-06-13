@@ -1,133 +1,134 @@
 """
-Flask Web API for FlashSearch
+Flask Web API & Frontend Server for FlashSearch
 """
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from indexer import build_index
 from search_engine import SearchEngine
 
-# Initialize Flask app
+# ─── Initialize ─────────────────────────────────────────────
 app = Flask(__name__)
 
-# Build index on startup
+print("Loading corpus and building index...")
 inverted_index, documents = build_index()
 engine = SearchEngine(inverted_index, documents)
-
-# Get statistics
 stats = engine.get_stats()
+print(f"Ready: {stats['total_documents']} docs, {stats['total_tokens']} tokens\n")
 
 
-@app.route('/', methods=['GET'])
+# ─── Frontend ────────────────────────────────────────────────
+@app.route("/", methods=["GET"])
 def home():
-    """Home endpoint - API information"""
+    """Serve the search UI."""
+    return render_template("index.html")
+
+
+# ─── API Endpoints ───────────────────────────────────────────
+@app.route("/api", methods=["GET"])
+def api_info():
+    """API documentation endpoint."""
     return jsonify({
         "name": "FlashSearch API",
-        "version": "1.0.0",
-        "description": "Full-text search engine for Wikipedia documents",
+        "version": "2.0.0",
+        "description": "Full-text search engine with TF-IDF ranking",
         "endpoints": {
-            "GET /": "This help message",
-            "GET /stats": "Index statistics",
-            "POST /search": "Search documents (AND query)",
-            "POST /search/or": "Search documents (OR query)"
-        }
+            "GET /": "Search UI",
+            "GET /api": "This help message",
+            "GET /api/stats": "Index and cache statistics",
+            "POST /api/search": "Search documents (AND query)",
+            "POST /api/search/or": "Search documents (OR query)",
+            "GET /api/document/<id>": "Get full document by ID",
+            "GET /api/health": "Health check",
+        },
     })
 
 
-@app.route('/stats', methods=['GET'])
+@app.route("/api/stats", methods=["GET"])
 def get_stats():
-    """Get index statistics"""
-    return jsonify({
-        "total_tokens": stats['total_tokens'],
-        "total_documents": stats['total_documents']
-    })
+    """Get index and cache statistics."""
+    return jsonify(engine.get_stats())
 
 
-@app.route('/search', methods=['POST'])
+@app.route("/api/search", methods=["POST"])
 def search():
     """
-    Search endpoint - AND search (all terms must match)
-    
-    Expected JSON:
-    {
-        "query": "search terms"
-    }
+    AND search — all terms must match.
+
+    JSON body:
+        {"query": "search terms", "limit": 20, "offset": 0}
     """
     data = request.get_json()
-    
-    if not data or 'query' not in data:
+
+    if not data or "query" not in data:
         return jsonify({"error": "Missing 'query' field"}), 400
-    
-    query = data.get('query', '').strip()
-    
+
+    query = data.get("query", "").strip()
     if not query:
         return jsonify({"error": "Query cannot be empty"}), 400
-    
-    results = engine.search(query)
-    
-    return jsonify({
-        "query": query,
-        "search_type": "AND",
-        "results_count": len(results),
-        "results": results
-    })
+
+    limit = min(int(data.get("limit", 20)), 100)
+    offset = max(int(data.get("offset", 0)), 0)
+
+    result = engine.search(query, limit=limit, offset=offset)
+    return jsonify(result)
 
 
-@app.route('/search/or', methods=['POST'])
+@app.route("/api/search/or", methods=["POST"])
 def search_or():
     """
-    OR Search endpoint - any term can match
-    
-    Expected JSON:
-    {
-        "query": "search terms"
-    }
+    OR search — any term can match.
+
+    JSON body:
+        {"query": "search terms", "limit": 20, "offset": 0}
     """
     data = request.get_json()
-    
-    if not data or 'query' not in data:
+
+    if not data or "query" not in data:
         return jsonify({"error": "Missing 'query' field"}), 400
-    
-    query = data.get('query', '').strip()
-    
+
+    query = data.get("query", "").strip()
     if not query:
         return jsonify({"error": "Query cannot be empty"}), 400
-    
-    results = engine.search_or(query)
-    
-    return jsonify({
-        "query": query,
-        "search_type": "OR",
-        "results_count": len(results),
-        "results": results
-    })
+
+    limit = min(int(data.get("limit", 20)), 100)
+    offset = max(int(data.get("offset", 0)), 0)
+
+    result = engine.search_or(query, limit=limit, offset=offset)
+    return jsonify(result)
 
 
-@app.route('/document/<int:doc_id>', methods=['GET'])
+@app.route("/api/document/<int:doc_id>", methods=["GET"])
 def get_document(doc_id):
-    """Get full document by ID"""
+    """Get full document by ID."""
     if doc_id < 1 or doc_id > len(documents):
         return jsonify({"error": "Document not found"}), 404
-    
-    doc = documents[doc_id - 1]  # doc_id is 1-indexed
+
+    doc = documents[doc_id - 1]
     return jsonify(doc)
 
 
+@app.route("/api/health", methods=["GET"])
+def health():
+    """Health check for deployment monitoring."""
+    return jsonify({
+        "status": "healthy",
+        "documents": stats["total_documents"],
+        "tokens": stats["total_tokens"],
+    })
+
+
+# ─── Error Handlers ──────────────────────────────────────────
 @app.errorhandler(404)
 def not_found(error):
-    """Handle 404 errors"""
     return jsonify({"error": "Endpoint not found"}), 404
 
 
 @app.errorhandler(500)
 def server_error(error):
-    """Handle 500 errors"""
     return jsonify({"error": "Internal server error"}), 500
 
 
-if __name__ == '__main__':
-    print(f"FlashSearch API Server")
-    print(f"Loaded {stats['total_documents']} documents with {stats['total_tokens']} unique tokens")
-    print(f"Starting server on http://127.0.0.1:5000")
-    print(f"Use POST /search or POST /search/or to search\n")
-    
-    app.run(debug=True, host='127.0.0.1', port=5000)
-
+# ─── Run ─────────────────────────────────────────────────────
+if __name__ == "__main__":
+    print(f"FlashSearch API — http://127.0.0.1:5000")
+    print(f"Endpoints: POST /api/search | POST /api/search/or\n")
+    app.run(debug=True, host="127.0.0.1", port=5000)
